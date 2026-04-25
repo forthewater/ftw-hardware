@@ -59,7 +59,23 @@
 
    Navigate to "Interfacing Options" > "SPI" and enable it.
 
-1. Clone the FTW Hardware repository and navigate to the beacon node directory:
+1. Enable the serial interface for the SIM7600 module:
+
+   ```bash
+   sudo raspi-config
+   ```
+
+   Navigate to "Interface Options" > "Serial Port" and set:
+   - "Would you like a login shell to be accessible over serial?" -> **No**
+   - "Would you like the serial port hardware to be enabled?" -> **Yes**
+
+   Reboot to apply the change:
+
+   ```bash
+   sudo reboot
+   ```
+
+1. Clone the FTW Hardware repository and navigate to the sensor node directory:
 
    ```bash
    git clone https://github.com/forthewater/ftw-hardware.git
@@ -74,9 +90,8 @@
    pip install -r requirements.txt
    ```
 
-1. Start the beacon node:
+1. Start the sensor node:
 
-   ````bash
+   ```bash
    python sensor-node.py
-   ```.
-   ````
+   ```
