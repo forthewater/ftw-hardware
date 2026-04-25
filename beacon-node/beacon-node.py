@@ -7,7 +7,7 @@ import adafruit_rfm9x
 RADIO_FREQ_MHZ = 433.0
 
 # Define pins based on our wiring
-CS = digitalio.DigitalInOut(board.CE0)
+CS = digitalio.DigitalInOut(board.D5)
 RESET = digitalio.DigitalInOut(board.D22)
 
 # Initialize SPI bus and LoRa radio
