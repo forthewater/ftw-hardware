@@ -1,61 +1,10 @@
 import os
 import time
 
-import serial
-import board
-import busio
-import digitalio
-import adafruit_rfm9x
-
 from arduino_data import WaterMonitor
 from daphnia_monitor import CameraUnavailableError, DaphniaMonitor
-
-# --- 1. LoRa Setup ---
-def resolve_board_pin(env_name, default_pin_name):
-    pin_name = os.getenv(env_name, default_pin_name)
-    pin = getattr(board, pin_name, None)
-    if pin is None:
-        raise ValueError(f"Invalid board pin '{pin_name}' for {env_name}")
-    return pin_name, pin
-
-
-def init_lora_radio():
-    if os.getenv("ENABLE_LORA", "1") != "1":
-        print("LoRa disabled (ENABLE_LORA != 1).")
-        return None, None, None, None
-
-    radio_freq_mhz = float(os.getenv("LORA_RADIO_FREQ_MHZ", "433.0"))
-    tx_power = int(os.getenv("LORA_TX_POWER", "13"))
-    cs_name, cs_pin = resolve_board_pin("LORA_CS_PIN", "D5")
-    reset_name, reset_pin = resolve_board_pin("LORA_RESET_PIN", "D22")
-
-    lora_cs = None
-    lora_reset = None
-    lora_spi = None
-    try:
-        lora_cs = digitalio.DigitalInOut(cs_pin)
-        lora_reset = digitalio.DigitalInOut(reset_pin)
-        lora_spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
-        radio = adafruit_rfm9x.RFM9x(lora_spi, lora_cs, lora_reset, radio_freq_mhz)
-        radio.tx_power = tx_power
-        print(
-            f"LoRa initialized (freq={radio_freq_mhz}MHz, tx={tx_power}dBm, "
-            f"CS={cs_name}, RESET={reset_name})."
-        )
-        return radio, lora_cs, lora_reset, lora_spi
-    except Exception as error:
-        for resource in (lora_cs, lora_reset, lora_spi):
-            if resource is not None and hasattr(resource, "deinit"):
-                resource.deinit()
-        print(f"LoRa init failed: {type(error).__name__}: {error}")
-        if "GPIO busy" in str(error):
-            print(
-                "Hint: another process is using this GPIO. "
-                "Stop the conflicting process, reboot, or choose a different pin via "
-                "LORA_RESET_PIN/LORA_CS_PIN."
-            )
-        raise
-
+from lora_radio import cleanup_lora_resources, init_lora_radio
+from sim7600_gps import open_sim7600_serial, power_on_gps, read_gps_payload, close_sim7600_serial
 
 rfm9x = None
 lora_cs = None
@@ -68,44 +17,13 @@ except Exception:
     exit()
 
 # --- 2. SIM7600 Serial Setup ---
-# /dev/serial0 is the default hardware serial port on the Pi (Pins 8 & 10)
-SERIAL_PORT = '/dev/serial0'
-BAUD_RATE = 115200
 sim_serial = None
 
 try:
-    sim_serial = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
-    print("SIM7600 Serial port opened.")
+    sim_serial = open_sim7600_serial()
 except Exception as e:
     print("Serial Error. Did you enable the Serial port in raspi-config?", e)
     exit()
-
-
-def send_at_command(command, wait_time=1):
-    """Sends an AT command to the SIM7600 and returns the response."""
-    sim_serial.write((command + '\r\n').encode())
-    time.sleep(wait_time)
-    response = ""
-    while sim_serial.in_waiting:
-        response += sim_serial.read(sim_serial.in_waiting).decode('utf-8', errors='ignore')
-    return response
-
-
-def extract_gps_payload(gps_data):
-    payload = "Waiting for GPS fix..."
-    lines = gps_data.split('\n')
-
-    for line in lines:
-        if "+CGPSINFO:" in line:
-            clean_line = line.strip()
-            if ",,,,,,,," in clean_line:
-                print("No GPS fix. Ensure the GPS antenna is outside with a clear view of the sky.")
-            else:
-                payload = clean_line
-                print("GPS fix acquired!")
-            break
-
-    return payload
 
 
 def setup_daphnia_monitor():
@@ -157,8 +75,7 @@ def to_water_payload(reading):
 
 # --- 3. Initialize GPS ---
 print("Powering on GPS...")
-# AT+CGPS=1 turns on the GNSS engine
-send_at_command("AT+CGPS=1", 2)
+power_on_gps(sim_serial)
 
 monitor, cap = setup_daphnia_monitor()
 water_monitor = setup_water_monitor()
@@ -167,8 +84,7 @@ print("Starting transmission loop...")
 # --- 4. Main Loop ---
 try:
     while True:
-        gps_data = send_at_command("AT+CGPSINFO", 1)
-        gps_payload = extract_gps_payload(gps_data)
+        gps_payload = read_gps_payload(sim_serial)
 
         daphnia_payload = "DAPH:NA"
         if monitor is not None and cap is not None:
@@ -210,8 +126,5 @@ finally:
         cap.release()
     if water_monitor is not None:
         water_monitor.close()
-    if sim_serial is not None:
-        sim_serial.close()
-    for resource in (lora_cs, lora_reset, lora_spi):
-        if resource is not None and hasattr(resource, "deinit"):
-            resource.deinit()
+    close_sim7600_serial(sim_serial)
+    cleanup_lora_resources(lora_cs, lora_reset, lora_spi)
