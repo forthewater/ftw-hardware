@@ -134,7 +134,7 @@ def build_sensor_telemetry(gps_payload, daph_payload, water_payload):
     return {
         "temperature": to_float(water.get("T"), 0.0),
         "lat": lat,
-        "lon": lon,
+        "long": lon,
         "ph": to_float(water.get("P"), 0.0),
         "bylhi": {
             "activity": to_float(daph.get("A"), 0.0),
@@ -149,7 +149,7 @@ def build_sensor_telemetry(gps_payload, daph_payload, water_payload):
 
 def post_telemetry(session, api_base_url, machine_id, payload):
     encoded_machine_id = quote(machine_id, safe="")
-    url = f"{api_base_url}/api/data/beacon/{encoded_machine_id}"
+    url = f"{api_base_url}/data/beacons/{encoded_machine_id}"
     response = session.post(url, json=payload, timeout=10)
     response.raise_for_status()
     return response.status_code

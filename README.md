@@ -48,7 +48,7 @@
 
    Beacon API configuration:
    - Create `beacon-node/.env` with: `API_BASE_URL=http://10.121.68.128:8080`.
-   - The beacon posts to `http://<API address>/api/data/beacon/<machine-id>`.
+   - The beacon posts to `http://<API address>/data/beacons/<machine-id>`.
    - Backward compatibility remains for env vars (`API_BASE_URL`, `API_ADDRESS`) and repository `.env`.
 
 ## Developer steps for configuring sensor node
