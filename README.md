@@ -34,6 +34,12 @@
    pip install -r requirements.txt
    ```
 
+   *Alternatively, to install directly to the system without a virtual environment:*
+
+   ```bash
+   pip install -r requirements.txt --break-system-packages
+   ```
+
 1. Start the beacon node:
 
    ```bash
@@ -75,6 +81,14 @@
    sudo reboot
    ```
 
+1. Enable camera interface:
+
+   ```bash
+   sudo raspi-config
+   ```
+
+   Navigate to "Interface Options" > "Camera" and enable it.
+
 1. Clone the FTW Hardware repository and navigate to the sensor node directory:
 
    ```bash
@@ -90,8 +104,37 @@
    pip install -r requirements.txt
    ```
 
+   *Alternatively, to install directly to the system without a virtual environment:*
+
+   ```bash
+   pip install -r requirements.txt --break-system-packages
+   ```
+
 1. Start the sensor node:
 
    ```bash
    python sensor-node.py
    ```
+
+## Daphnia activity monitor
+
+The sensor node now appends daphnia activity metrics to each LoRa payload in this format:
+`DAPH:A<activity>,S<speed>,I<immobility>,D<dispersion>,N<anomaly>`
+
+Useful environment variables:
+- `ENABLE_DAPHNIA` (default `1`) set to `0` to disable camera analysis.
+- `DAPHNIA_CAMERA_INDEX` (default `0`) selects the OpenCV camera.
+- `DAPHNIA_WINDOW_SECONDS` (default `8`) capture window length.
+- `DAPHNIA_FPS` (default `10`) target frame rate.
+
+Run monitor only (without LoRa/SIM7600) from `sensor-node/`:
+
+```bash
+python daphnia_monitor.py --camera 0 --window-seconds 10 --fps 10
+```
+
+Run hardware-free unit tests from `sensor-node/`:
+
+```bash
+python -m unittest discover -s tests -p "test_*.py"
+```
