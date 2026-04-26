@@ -1,3 +1,5 @@
 adafruit-blinka
 adafruit-circuitpython-rfm9x
 pyserial
+numpy
+opencv-python
