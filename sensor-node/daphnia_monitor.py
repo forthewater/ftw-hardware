@@ -195,17 +195,108 @@ def _main() -> None:
     parser.add_argument("--camera", type=int, default=0, help="Camera index for OpenCV")
     parser.add_argument("--window-seconds", type=float, default=10.0, help="Sample window length")
     parser.add_argument("--fps", type=float, default=10.0, help="Target capture FPS")
+    parser.add_argument(
+        "--no-preview",
+        action="store_true",
+        help="Disable preview window (enabled by default)",
+    )
+    parser.add_argument(
+        "--no-overlay",
+        action="store_true",
+        help="Disable metric overlay text in preview",
+    )
     args = parser.parse_args()
 
     monitor = DaphniaMonitor()
     cap = DaphniaMonitor.open_camera(args.camera)
+
+    if cv2 is not None:
+        cap.set(cv2.CAP_PROP_FPS, args.fps)
+
+    preview_enabled = not args.no_preview
+    overlay_enabled = not args.no_overlay
+    window_frame_count = max(2, int(args.window_seconds * args.fps))
+    frame_interval_s = 1.0 / args.fps
+    frames: List[np.ndarray] = []
+    latest_metrics: Optional[DaphniaMetrics] = None
+    latest_payload = "DAPH:NA"
+
     try:
         while True:
-            frames = DaphniaMonitor.capture_window(cap, args.window_seconds, args.fps)
-            metrics = monitor.analyze_frames(frames, fps=args.fps)
-            print(DaphniaMonitor.to_payload(metrics))
+            loop_start = time.time()
+            success, frame = cap.read()
+            if not success:
+                print("Camera frame read failed; retrying...")
+                continue
+
+            frames.append(frame)
+
+            if len(frames) >= window_frame_count:
+                metrics = monitor.analyze_frames(frames, fps=args.fps)
+                latest_metrics = metrics
+                latest_payload = DaphniaMonitor.to_payload(metrics)
+                print(latest_payload)
+                print(
+                    "metrics: "
+                    f"activity={metrics.activity_score:.4f}, "
+                    f"speed_px_s={metrics.mean_speed_px_s:.2f}, "
+                    f"immobility={metrics.immobility_ratio:.2f}, "
+                    f"dispersion_px={metrics.moving_centroid_dispersion_px:.2f}, "
+                    f"anomaly_score={metrics.anomaly_score:.2f}, "
+                    f"anomaly_flag={metrics.anomaly_flag}"
+                )
+                frames.clear()
+
+            if preview_enabled and cv2 is not None:
+                preview_frame = frame.copy()
+                if overlay_enabled:
+                    cv2.putText(
+                        preview_frame,
+                        f"buffer: {len(frames)}/{window_frame_count}",
+                        (10, 25),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (0, 255, 0),
+                        2,
+                        cv2.LINE_AA,
+                    )
+                    cv2.putText(
+                        preview_frame,
+                        latest_payload,
+                        (10, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (255, 255, 255),
+                        1,
+                        cv2.LINE_AA,
+                    )
+                    if latest_metrics is not None:
+                        cv2.putText(
+                            preview_frame,
+                            f"A:{latest_metrics.activity_score:.3f} S:{latest_metrics.mean_speed_px_s:.1f} "
+                            f"I:{latest_metrics.immobility_ratio:.2f} N:{latest_metrics.anomaly_flag}",
+                            (10, 72),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.5,
+                            (255, 255, 0),
+                            1,
+                            cv2.LINE_AA,
+                        )
+
+                cv2.imshow("Daphnia Monitor", preview_frame)
+                key = cv2.waitKey(1) & 0xFF
+                if key in (ord("q"), 27):
+                    print("Stopping monitor (quit key).")
+                    break
+
+            elapsed = time.time() - loop_start
+            sleep_time = max(0.0, frame_interval_s - elapsed)
+            if sleep_time > 0:
+                time.sleep(sleep_time)
     finally:
         cap.release()
+        if cv2 is not None:
+            cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
