@@ -8,7 +8,7 @@
    ```bash
    sudo apt update
    sudo apt upgrade -y
-   sudo apt install -y git build-essential
+   sudo apt install -y git build-essential swig
    ```
 
 1. Enable SPI interface on the Raspberry Pi:
@@ -48,7 +48,7 @@
    ```bash
    sudo apt update
    sudo apt upgrade -y
-   sudo apt install -y git build-essential
+   sudo apt install -y git build-essential swig
    ```
 
 1. Enable SPI interface on the Raspberry Pi:

@@ -1,4 +1,2 @@
 adafruit-blinka
 adafruit-circuitpython-rfm9x
-RPi.GPIO; python_version < "3.13"
-rpi-lgpio; python_version >= "3.13"
