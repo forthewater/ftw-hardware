@@ -46,6 +46,11 @@
    python beacon-node.py
    ```
 
+   Beacon API configuration:
+   - Create `beacon-node/.env` with: `API_BASE_URL=http://10.121.68.128:8080`.
+   - The beacon posts to `http://<API address>/api/data/beacon/<machine-id>`.
+   - Backward compatibility remains for env vars (`API_BASE_URL`, `API_ADDRESS`) and repository `.env`.
+
 ## Developer steps for configuring sensor node
 
 1. Install Raspbian OS on the SD card and set up the Raspberry Pi.
@@ -119,13 +124,18 @@
 ## Daphnia activity monitor
 
 The sensor node now appends daphnia activity metrics to each LoRa payload in this format:
-`DAPH:A<activity>,S<speed>,I<immobility>,D<dispersion>,N<anomaly>`
+`DAPH:A<activity>,S<speed>,I<immobility>,D<dispersion>,Z<anomaly_score>,N<anomaly_flag>`
+
+Every transmitted LoRa message now starts with a persistent machine identifier:
+`MID:<machine-id>|<gps>|<daph>|<water>`
 
 Useful environment variables:
 - `ENABLE_DAPHNIA` (default `1`) set to `0` to disable camera analysis.
 - `DAPHNIA_CAMERA_INDEX` (default `0`) selects the OpenCV camera.
 - `DAPHNIA_WINDOW_SECONDS` (default `8`) capture window length.
 - `DAPHNIA_FPS` (default `10`) target frame rate.
+- `SENSOR_MACHINE_ID` overrides the generated machine ID.
+- `SENSOR_MACHINE_ID_FILE` sets where generated IDs are persisted (default: `sensor-node/.machine_id`).
 
 Run monitor only (without LoRa/SIM7600) from `sensor-node/`:
 

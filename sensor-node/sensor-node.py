@@ -1,5 +1,7 @@
 import os
 import time
+import uuid
+from pathlib import Path
 
 from arduino_data import WaterMonitor
 from daphnia_monitor import CameraUnavailableError, DaphniaMonitor
@@ -10,6 +12,45 @@ rfm9x = None
 lora_cs = None
 lora_reset = None
 lora_spi = None
+
+
+def _sanitize_machine_id(raw_value):
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
+    cleaned = "".join(ch for ch in raw_value.strip() if ch in allowed)
+    return cleaned or "unknown-node"
+
+
+def get_machine_id():
+    env_machine_id = os.getenv("SENSOR_MACHINE_ID") or os.getenv("MACHINE_ID")
+    if env_machine_id:
+        return _sanitize_machine_id(env_machine_id)
+
+    try:
+        with open("/etc/machine-id", "r", encoding="utf-8") as machine_id_file:
+            machine_id = machine_id_file.readline().strip()
+            if machine_id:
+                return _sanitize_machine_id(machine_id)
+    except OSError:
+        pass
+
+    machine_id_path = Path(
+        os.getenv("SENSOR_MACHINE_ID_FILE", str(Path(__file__).resolve().parent / ".machine_id"))
+    )
+    try:
+        if machine_id_path.exists():
+            existing_id = machine_id_path.read_text(encoding="utf-8").strip()
+            if existing_id:
+                return _sanitize_machine_id(existing_id)
+    except OSError:
+        pass
+
+    generated_id = _sanitize_machine_id(uuid.uuid4().hex)
+    try:
+        machine_id_path.parent.mkdir(parents=True, exist_ok=True)
+        machine_id_path.write_text(generated_id + "\n", encoding="utf-8")
+    except OSError as error:
+        print(f"Warning: could not persist generated machine ID: {error}")
+    return generated_id
 
 try:
     rfm9x, lora_cs, lora_reset, lora_spi = init_lora_radio()
@@ -47,7 +88,7 @@ def setup_water_monitor():
         print("Water monitor disabled (ENABLE_WATER != 1).")
         return None
 
-    port = os.getenv("ARDUINO_PORT", "/dev/ttyUSB5")
+    port = os.getenv("ARDUINO_PORT", "/dev/ttyUSB0")
     baud_rate = int(os.getenv("ARDUINO_BAUD", "9600"))
     try:
         monitor = WaterMonitor(port=port, baud_rate=baud_rate)
@@ -62,10 +103,12 @@ def to_water_payload(reading):
     if not isinstance(reading, dict):
         return "WATER:ERR"
 
+    temperature = reading.get("temperature")
     conductivity = reading.get("conductivity")
     ph = reading.get("ph")
     if conductivity is not None and ph is not None:
-        return f"WATER:C{float(conductivity):.2f},P{float(ph):.2f}"
+        temp_value = float(temperature) if temperature is not None else 0.0
+        return f"WATER:T{temp_value:.2f},C{float(conductivity):.2f},P{float(ph):.2f}"
 
     if reading.get("error"):
         return "WATER:ERR"
@@ -79,6 +122,8 @@ power_on_gps(sim_serial)
 
 monitor, cap = setup_daphnia_monitor()
 water_monitor = setup_water_monitor()
+machine_id = get_machine_id()
+print(f"Machine ID: {machine_id}")
 print("Starting transmission loop...")
 
 # --- 4. Main Loop ---
@@ -109,7 +154,7 @@ try:
                 water_payload = "WATER:ERR"
                 print(f"Water monitor error: {error}")
 
-        payload = f"{gps_payload}|{daphnia_payload}|{water_payload}"
+        payload = f"MID:{machine_id}|{gps_payload}|{daphnia_payload}|{water_payload}"
 
         if rfm9x is not None:
             print(f"Transmitting over LoRa: {payload}")
