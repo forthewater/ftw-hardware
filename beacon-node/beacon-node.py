@@ -134,7 +134,7 @@ def build_sensor_telemetry(gps_payload, daph_payload, water_payload):
     return {
         "temperature": to_float(water.get("T"), 0.0),
         "lat": lat,
-        "long": lon,
+        "lon": lon,
         "ph": to_float(water.get("P"), 0.0),
         "bylhi": {
             "activity": to_float(daph.get("A"), 0.0),
